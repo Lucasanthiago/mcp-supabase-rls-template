@@ -19,9 +19,13 @@ Ao terminar este guia você vai ter, no seu próprio Supabase:
 **Leva cerca de 30 minutos.** Nada aqui custa dinheiro: o plano gratuito do
 Supabase basta.
 
-> Quer entender *por que* cada decisão foi tomada — o raciocínio de cada policy,
-> as armadilhas de RLS, a procedência do servidor MCP? Está em
-> [docs/ARQUITETURA.md](docs/ARQUITETURA.md). Este arquivo é só o passo a passo.
+Este arquivo é só o passo a passo. Para entender o resto:
+
+- **[docs/VISAO-GERAL.md](docs/VISAO-GERAL.md)** — o que o projeto prova, por que
+  existe, e como as peças se encaixam. Comece por aqui se quiser decidir se este
+  desenho serve para você.
+- **[docs/ARQUITETURA.md](docs/ARQUITETURA.md)** — o raciocínio de cada policy, as
+  armadilhas de RLS e a procedência do servidor MCP.
 
 ---
 
