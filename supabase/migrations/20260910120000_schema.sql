@@ -1,5 +1,5 @@
 -- =============================================================================
--- Schema minimo multitenant (simulacao simplificada do CliniShot)
+-- Schema minimo multitenant: duas clinicas no mesmo banco
 --
 -- Cadeia de pertencimento que todo o RLS vai usar:
 --   exame -> paciente -> organizacao -> membro -> auth.users (auth.uid())
