@@ -1,0 +1,101 @@
+# Prova de isolamento do RLS rodando no CI.
+#
+# Sao dois niveis, de proposito:
+#
+#   job `sql`       - nao precisa de segredo nenhum. Sobe um Postgres 16, aplica
+#                     o shim do schema auth, as migrations REAIS e a bateria de
+#                     isolamento. Roda em todo push e protege as policies contra
+#                     regressao.
+#
+#   job `supabase`  - o caminho completo (anon key -> login -> JWT -> PostgREST).
+#                     So roda se os secrets estiverem configurados; sem eles, o
+#                     job termina explicando o que falta em vez de falhar.
+name: RLS
+
+on:
+  push:
+    branches-ignore: []
+  workflow_dispatch:
+
+jobs:
+  sql:
+    name: policies em Postgres puro (sem segredos)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+
+      - name: migrations reais + 24 assercoes de isolamento
+        run: bash db/local-verify/run.sh
+
+      - name: db/hosted/schema-completo.sql ainda reflete as migrations
+        run: |
+          bash db/hosted/gerar.sh /tmp/esperado.sql
+          diff -u /tmp/esperado.sql db/hosted/schema-completo.sql \
+            || { echo "::error::o derivado divergiu. Rode: bash db/hosted/gerar.sh"; exit 1; }
+
+  supabase:
+    name: ponta a ponta contra o Supabase (precisa dos secrets)
+    runs-on: ubuntu-latest
+
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: verificar se os secrets existem
+        id: check
+        run: |
+          if [ -z "${SUPABASE_URL}" ]; then
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+            echo "Secrets ausentes. Configure em Settings > Secrets and variables > Actions:"
+            echo "  SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY"
+            echo "O job termina verde: o isolamento ja foi provado no job 'sql'."
+          else
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: seed (cria os usuarios e repopula os dois tenants)
+        if: steps.check.outputs.configurado == 'true'
+        run: npm run seed
+
+      - name: prova de isolamento com login real
+        if: steps.check.outputs.configurado == 'true'
+        run: npm run test:rls

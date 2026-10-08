@@ -1,0 +1,831 @@
+<title>Prontuários Multitenant</title>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Layout: app de prontuario em duas colunas (pacientes | registro do paciente).
+     O botao "ver as duas clinicas" espelha esse mesmo painel lado a lado.
+     Cada clinica tem cor propria, para dar para saber de quem e o dado de longe. */
+  :root {
+    --bg: #f4f5f7;
+    --superficie: #ffffff;
+    --superficie-2: #eceef1;
+    --borda: #d8dbe0;
+    --borda-forte: #b9bec7;
+    --tinta: #1c2024;
+    --tinta-fraca: #5c636d;
+    --tinta-fraquissima: #878e99;
+    --alfa: #0f6e62;
+    --alfa-fraco: #e2f1ee;
+    --beta: #5b3fa8;
+    --beta-fraco: #ebe6f8;
+    --bloqueio: #a32b23;
+    --bloqueio-fraco: #fbe9e7;
+    --ok: #1f6b3a;
+    --foco: #2563a8;
+
+    --f-display: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+    --f-corpo: 'Source Sans 3', -apple-system, 'Segoe UI', sans-serif;
+    --f-dado: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171a;
+      --superficie: #1d2126;
+      --superficie-2: #262b31;
+      --borda: #333a42;
+      --borda-forte: #4a535d;
+      --tinta: #eceef1;
+      --tinta-fraca: #a7aeb8;
+      --tinta-fraquissima: #7c838e;
+      --alfa: #4fbfae;
+      --alfa-fraco: #16302c;
+      --beta: #a98ff0;
+      --beta-fraco: #262043;
+      --bloqueio: #f0837a;
+      --bloqueio-fraco: #3a1b18;
+      --ok: #62c187;
+      --foco: #6ba8e8;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171a;
+    --superficie: #1d2126;
+    --superficie-2: #262b31;
+    --borda: #333a42;
+    --borda-forte: #4a535d;
+    --tinta: #eceef1;
+    --tinta-fraca: #a7aeb8;
+    --tinta-fraquissima: #7c838e;
+    --alfa: #4fbfae;
+    --alfa-fraco: #16302c;
+    --beta: #a98ff0;
+    --beta-fraco: #262043;
+    --bloqueio: #f0837a;
+    --bloqueio-fraco: #3a1b18;
+    --ok: #62c187;
+    --foco: #6ba8e8;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--tinta);
+    font-family: var(--f-corpo);
+    font-size: 15px;
+    line-height: 1.5;
+    margin: 0;
+  }
+  .pagina {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding-inline: 16px;
+    padding-block: 20px 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  h1, h2, h3 { font-family: var(--f-display); margin: 0; text-wrap: balance; }
+  h1 { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.01em; }
+  h2 { font-size: 0.95rem; font-weight: 600; }
+  h3 { font-size: 0.82rem; font-weight: 600; }
+  :focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+
+  .rotulo {
+    font-family: var(--f-display);
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--tinta-fraquissima);
+  }
+  .mono { font-family: var(--f-dado); font-variant-numeric: tabular-nums; }
+
+  /* ---------- topo ---------- */
+  .topo { display: flex; flex-wrap: wrap; gap: 14px 20px; align-items: flex-end; justify-content: space-between; }
+  .topo p { margin: 4px 0 0; color: var(--tinta-fraca); max-width: 58ch; font-size: 0.9rem; }
+  .controles { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  button {
+    font-family: var(--f-display);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--tinta);
+    background: var(--superficie);
+    border: 1px solid var(--borda-forte);
+    border-radius: 6px;
+    padding: 7px 13px;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--tinta-fraca); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button[aria-pressed="true"] { background: var(--tinta); color: var(--bg); border-color: var(--tinta); }
+
+  /* ---------- painel da clinica ---------- */
+  .painéis { display: grid; gap: 16px; }
+  .painéis[data-modo="comparacao"] { grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); }
+
+  .clinica {
+    --cor: var(--alfa);
+    --cor-fraca: var(--alfa-fraco);
+    background: var(--superficie);
+    border: 1px solid var(--borda);
+    border-radius: 10px;
+    overflow: hidden;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .clinica[data-org="beta"] { --cor: var(--beta); --cor-fraca: var(--beta-fraco); }
+
+  .cabecalho {
+    display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--cor-fraca);
+    border-bottom: 1px solid var(--borda);
+    border-left: 4px solid var(--cor);
+  }
+  .cabecalho .quem { min-width: 0; }
+  .cabecalho h2 { color: var(--cor); }
+  .cabecalho .email { font-size: 0.78rem; color: var(--tinta-fraca); overflow-wrap: anywhere; }
+  .selo {
+    font-family: var(--f-display); font-size: 0.64rem; font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--cor); border: 1px solid var(--cor); border-radius: 999px;
+    padding: 2px 8px; white-space: nowrap;
+  }
+
+  .corpo { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); flex: 1; }
+  @media (max-width: 720px) { .corpo { grid-template-columns: minmax(0, 1fr); } }
+  .coluna { padding: 14px 16px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .coluna + .coluna { border-left: 1px solid var(--borda); }
+  @media (max-width: 720px) { .coluna + .coluna { border-left: 0; border-top: 1px solid var(--borda); } }
+
+  .lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+  .paciente {
+    display: block; width: 100%; text-align: left;
+    font-family: var(--f-corpo); font-size: 0.92rem; font-weight: 400;
+    background: transparent; border: 1px solid transparent; border-radius: 7px;
+    padding: 8px 10px;
+  }
+  .paciente:hover { background: var(--superficie-2); border-color: transparent; }
+  .paciente[aria-current="true"] { background: var(--cor-fraca); border-color: var(--cor); color: var(--tinta); }
+  .paciente .nasc { display: block; font-size: 0.73rem; color: var(--tinta-fraquissima); font-family: var(--f-dado); }
+
+  .exame {
+    border: 1px solid var(--borda); border-radius: 7px; padding: 9px 11px;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .exame .cima { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; }
+  .exame .tipo { font-family: var(--f-display); font-size: 0.86rem; font-weight: 600; }
+  .exame .data { font-family: var(--f-dado); font-size: 0.73rem; color: var(--tinta-fraca); white-space: nowrap; }
+  .exame .resultado { font-size: 0.86rem; color: var(--tinta-fraca); }
+  .exame .resultado:empty::before { content: 'sem laudo registrado'; font-style: italic; color: var(--tinta-fraquissima); }
+
+  .vazio { font-size: 0.86rem; color: var(--tinta-fraquissima); font-style: italic; }
+
+  form.novo { display: flex; flex-wrap: wrap; gap: 6px; }
+  form.novo input {
+    flex: 1 1 110px; min-width: 0;
+    font-family: var(--f-corpo); font-size: 0.86rem;
+    color: var(--tinta); background: var(--bg);
+    border: 1px solid var(--borda-forte); border-radius: 6px; padding: 6px 9px;
+  }
+  form.novo button { flex: 0 0 auto; }
+
+  .bloqueio-area { border-top: 1px dashed var(--borda-forte); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .btn-bloqueio { color: var(--bloqueio); border-color: var(--bloqueio); background: transparent; }
+  .btn-bloqueio:hover:not(:disabled) { background: var(--bloqueio-fraco); border-color: var(--bloqueio); }
+  .aviso {
+    font-size: 0.84rem; border-radius: 7px; padding: 9px 11px;
+    display: flex; gap: 8px; align-items: flex-start;
+  }
+  .aviso.negado { background: var(--bloqueio-fraco); color: var(--bloqueio); border: 1px solid var(--bloqueio); }
+  .aviso.aceito { background: var(--cor-fraca); color: var(--ok); border: 1px solid var(--ok); }
+  .aviso.esperando { background: var(--superficie-2); color: var(--tinta-fraca); border: 1px solid var(--borda-forte); }
+  .aviso strong { font-family: var(--f-display); }
+
+  /* ---------- rodape e chamada ---------- */
+  .rodape {
+    background: var(--superficie); border: 1px solid var(--borda); border-radius: 10px;
+    padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .fluxo { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-family: var(--f-display); font-size: 0.8rem; font-weight: 600; }
+  .fluxo span.caixa { border: 1px solid var(--borda-forte); border-radius: 6px; padding: 4px 9px; background: var(--superficie-2); }
+  .fluxo span.seta { color: var(--tinta-fraquissima); }
+  .rodape p { margin: 0; font-size: 0.88rem; color: var(--tinta-fraca); max-width: 72ch; }
+  details summary {
+    font-family: var(--f-display); font-size: 0.8rem; font-weight: 600;
+    cursor: pointer; color: var(--tinta-fraca);
+  }
+  pre.chamada {
+    font-family: var(--f-dado); font-size: 0.74rem; line-height: 1.45;
+    background: var(--bg); border: 1px solid var(--borda); border-radius: 7px;
+    padding: 11px; margin: 10px 0 0; overflow-x: auto; white-space: pre; color: var(--tinta-fraca);
+  }
+  .nota-chave { font-size: 0.8rem; color: var(--tinta-fraquissima); }
+
+  /* O servidor MCP, visivel: o que ele oferece e o que esta sendo chamado. */
+  .servidor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 720px) { .servidor { grid-template-columns: minmax(0, 1fr); } }
+  .bloco { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+  .ferramenta {
+    display: flex; gap: 10px; align-items: baseline; justify-content: space-between;
+    border: 1px solid var(--borda); border-radius: 7px; padding: 7px 10px;
+  }
+  .ferramenta .nome { font-family: var(--f-dado); font-size: 0.82rem; color: var(--tinta); overflow-wrap: anywhere; }
+  .ferramenta .o-que { display: block; font-family: var(--f-corpo); font-size: 0.78rem; color: var(--tinta-fraquissima); }
+  .badge {
+    font-family: var(--f-display); font-size: 0.62rem; font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    border-radius: 999px; padding: 2px 8px; white-space: nowrap; border: 1px solid;
+  }
+  .badge.leitura { color: var(--tinta-fraca); border-color: var(--borda-forte); }
+  .badge.escrita { color: var(--bloqueio); border-color: var(--bloqueio); }
+
+  .log { display: flex; flex-direction: column; gap: 3px; font-family: var(--f-dado); font-size: 0.78rem; }
+  .log-linha {
+    display: flex; gap: 10px; align-items: baseline;
+    border-bottom: 1px solid var(--borda); padding: 4px 2px;
+  }
+  .log-linha .hora { color: var(--tinta-fraquissima); font-variant-numeric: tabular-nums; }
+  .log-linha .tool { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--tinta); }
+  .log-linha .estado { font-family: var(--f-display); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.04em; white-space: nowrap; }
+  .log-linha .estado.ok { color: var(--ok); }
+  .log-linha .estado.bloq { color: var(--bloqueio); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="pagina">
+  <header class="topo">
+    <div>
+      <h1>Prontuários Multitenant</h1>
+      <p>Duas clínicas, um banco de dados. Cada médico só alcança os pacientes da clínica dele — e quem decide isso é o banco, não esta tela.</p>
+    </div>
+    <div class="controles">
+      <button id="btn-alfa" aria-pressed="true">Clínica Alfa</button>
+      <button id="btn-beta" aria-pressed="false">Clínica Beta</button>
+      <button id="btn-comparar" aria-pressed="false">Ver as duas</button>
+    </div>
+  </header>
+
+  <div class="painéis" id="paineis" data-modo="app"></div>
+
+  <footer class="rodape">
+    <div class="fluxo">
+      <span class="caixa">Esta tela</span>
+      <span class="seta">→</span>
+      <span class="caixa">Servidor MCP (Edge Function)</span>
+      <span class="seta">→</span>
+      <span class="caixa">RLS no Postgres</span>
+    </div>
+    <p>A tela pede &ldquo;os pacientes&rdquo; e nada mais: não existe filtro de clínica aqui nem na ferramenta do servidor. A separação está nas policies do banco, que leem quem assinou o token. As duas metades do modo comparação rodam exatamente o mesmo código.</p>
+
+    <div class="servidor">
+      <div class="bloco">
+        <div class="rotulo" id="rotulo-ferramentas">Tudo o que o servidor oferece</div>
+        <div class="lista" id="ferramentas"><p class="vazio">Perguntando ao servidor…</p></div>
+        <p class="nota-chave">Esta é a lista inteira, e ela veio do próprio servidor. Não existe consulta livre ao banco: nem esta tela nem um assistente de IA conseguem pedir outra coisa.</p>
+      </div>
+      <div class="bloco">
+        <div class="rotulo">Chamadas, ao vivo</div>
+        <div class="log" id="log-chamadas"><p class="vazio">Nenhuma chamada ainda.</p></div>
+      </div>
+    </div>
+
+    <details>
+      <summary>Ver a última chamada ao servidor</summary>
+      <pre class="chamada mono" id="log">Nenhuma chamada ainda.</pre>
+    </details>
+    <p class="nota-chave">Dados fictícios. Usuários de teste de uma prova de conceito, com a chave pública do projeto — a mesma que qualquer aplicativo web usa no navegador.</p>
+  </footer>
+</div>
+
+<script src="config.js"></script>
+
+<script>
+  // Vem de web/config.js, que voce cria a partir de web/config.example.js.
+  const CFG = window.CONFIG || {};
+  const SUPABASE_URL = (CFG.SUPABASE_URL || '').replace(/\/+$/, '');
+  const CHAVE_PUBLICA = CFG.CHAVE_PUBLICA || '';
+  const MCP_URL = SUPABASE_URL + '/functions/v1/mcp';
+
+  const configurado =
+    SUPABASE_URL.startsWith('https://') &&
+    !SUPABASE_URL.includes('SEU-PROJETO') &&
+    CHAVE_PUBLICA &&
+    !CHAVE_PUBLICA.includes('COLE_A_SUA');
+  const PROTOCOLO = '2025-06-18';
+  const SENHA = 'senha-de-teste-123';
+
+  const CLINICAS = [
+    { chave: 'alfa', nome: 'Clínica Alfa', email: 'medico.alfa@exemplo.test' },
+    { chave: 'beta', nome: 'Clínica Beta', email: 'medico.beta@exemplo.test' },
+  ];
+
+  // Estado por clinica: token, identidade vinda do whoami, pacientes, selecao.
+  const estado = {};
+  for (const c of CLINICAS) {
+    estado[c.chave] = { ...c, token: null, eu: null, pacientes: [], selecionado: null, exames: null, aviso: null, carregando: true };
+  }
+  let modo = 'app';
+  let clinicaAtiva = 'alfa';
+
+  const elPaineis = document.getElementById('paineis');
+  const elLog = document.getElementById('log');
+  const elFerramentas = document.getElementById('ferramentas');
+  const elRotuloFerramentas = document.getElementById('rotulo-ferramentas');
+  const elChamadas = document.getElementById('log-chamadas');
+
+  // Registro visivel das chamadas: e o que mostra, durante a apresentacao, que
+  // cada clique da tela vira uma chamada de ferramenta no servidor MCP.
+  const chamadas = [];
+
+  function anotarChamada(nome, rotulo, estado) {
+    chamadas.unshift({
+      hora: new Date().toLocaleTimeString('pt-BR', { hour12: false }),
+      nome,
+      rotulo,
+      estado,
+    });
+    chamadas.length = Math.min(chamadas.length, 9);
+    desenharChamadas();
+  }
+
+  function desenharChamadas() {
+    if (!chamadas.length) return;
+    elChamadas.replaceChildren(
+      ...chamadas.map((c) => {
+        const linha = document.createElement('div');
+        linha.className = 'log-linha';
+        const hora = document.createElement('span');
+        hora.className = 'hora';
+        hora.textContent = c.hora;
+        const tool = document.createElement('span');
+        tool.className = 'tool';
+        tool.textContent = c.nome + (c.rotulo ? '  ·  ' + c.rotulo : '');
+        const estado = document.createElement('span');
+        estado.className = 'estado ' + (c.estado === 'ok' ? 'ok' : 'bloq');
+        estado.textContent = c.estado === 'ok' ? 'ok' : 'bloqueado';
+        linha.append(hora, tool, estado);
+        return linha;
+      })
+    );
+  }
+
+  /* ----------------- transporte ----------------- */
+
+  function registrarChamada(pedido, resposta) {
+    elLog.textContent =
+      '-> POST ' + MCP_URL + '\n' +
+      JSON.stringify(pedido, null, 2) + '\n\n<- ' + resposta;
+  }
+
+  // O servidor responde em JSON puro ou em SSE (`event: message` / `data: {...}`).
+  function extrairEnvelope(corpo, contentType) {
+    const texto = (contentType || '').includes('text/event-stream')
+      ? corpo.split('\n').filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trim()).at(-1)
+      : corpo;
+    try { return JSON.parse(texto || ''); } catch { return null; }
+  }
+
+  async function entrar(email) {
+    const res = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      headers: { apikey: CHAVE_PUBLICA, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: SENHA }),
+    });
+    const dados = await res.json();
+    if (!res.ok || !dados.access_token) {
+      throw new Error('não foi possível entrar como ' + email + (dados.error_description ? ': ' + dados.error_description : ''));
+    }
+    return dados.access_token;
+  }
+
+  /**
+   * tools/list: o contrato do servidor, perguntado a ele mesmo. E o argumento
+   * mais forte da apresentacao - a IA so alcanca o que estiver nesta lista.
+   */
+  async function listarFerramentas(token) {
+    const res = await fetch(MCP_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        'MCP-Protocol-Version': PROTOCOLO,
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'tools/list' }),
+    });
+    const envelope = extrairEnvelope(await res.text(), res.headers.get('content-type'));
+    return (envelope && envelope.result && envelope.result.tools) || [];
+  }
+
+  const RESUMO = {
+    whoami: 'quem é o usuário do token',
+    listar_pacientes: 'os pacientes da clínica dele',
+    buscar_exames: 'os exames de um paciente',
+    criar_exame: 'registra um exame novo',
+  };
+
+  async function desenharFerramentas(token) {
+    let ferramentas = [];
+    try {
+      ferramentas = await listarFerramentas(token);
+    } catch {
+      // sem lista: o rodape continua util sem ela
+    }
+    if (!ferramentas.length) {
+      elFerramentas.replaceChildren(
+        Object.assign(document.createElement('p'), {
+          className: 'vazio',
+          textContent: 'Não foi possível ler a lista de ferramentas.',
+        })
+      );
+      return;
+    }
+    elRotuloFerramentas.textContent = 'Tudo o que o servidor oferece · ' + ferramentas.length;
+    elFerramentas.replaceChildren(
+      ...ferramentas.map((f) => {
+        const linha = document.createElement('div');
+        linha.className = 'ferramenta';
+        const esq = document.createElement('div');
+        const nome = document.createElement('span');
+        nome.className = 'nome';
+        nome.textContent = f.name;
+        const oque = document.createElement('span');
+        oque.className = 'o-que';
+        oque.textContent = RESUMO[f.name] || '';
+        esq.append(nome, oque);
+        const somenteLeitura = f.annotations && f.annotations.readOnlyHint === true;
+        const badge = document.createElement('span');
+        badge.className = 'badge ' + (somenteLeitura ? 'leitura' : 'escrita');
+        badge.textContent = somenteLeitura ? 'só leitura' : 'escreve';
+        linha.append(esq, badge);
+        return linha;
+      })
+    );
+  }
+
+  let proximoId = 1;
+  async function chamarTool(token, nome, args, rotulo) {
+    const pedido = {
+      jsonrpc: '2.0', id: proximoId++,
+      method: 'tools/call',
+      params: { name: nome, arguments: args || {} },
+    };
+    const res = await fetch(MCP_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        'MCP-Protocol-Version': PROTOCOLO,
+      },
+      body: JSON.stringify(pedido),
+    });
+    const corpo = await res.text();
+    const envelope = extrairEnvelope(corpo, res.headers.get('content-type'));
+    registrarChamada(pedido, 'HTTP ' + res.status + '\n' + (envelope ? JSON.stringify(envelope, null, 2) : corpo).slice(0, 2600));
+
+    const result = envelope && envelope.result;
+    if (!result) {
+      const msg = (envelope && envelope.error && envelope.error.message) || ('HTTP ' + res.status);
+      anotarChamada(nome, rotulo, 'bloq');
+      return { erro: msg, dados: null };
+    }
+    if (result.isError === true) {
+      anotarChamada(nome, rotulo, 'bloq');
+      return { erro: (result.content && result.content[0] && result.content[0].text) || 'a ferramenta falhou', dados: null };
+    }
+    anotarChamada(nome, rotulo, 'ok');
+    if (result.structuredContent === undefined || result.structuredContent === null) {
+      return { erro: 'o servidor respondeu sem dados estruturados', dados: null };
+    }
+    return { erro: null, dados: result.structuredContent };
+  }
+
+  /* ----------------- carga ----------------- */
+
+  async function abrirClinica(chave) {
+    const s = estado[chave];
+    try {
+      s.token = await entrar(s.email);
+      const quem = await chamarTool(s.token, 'whoami', {}, s.nome);
+      if (quem.erro) throw new Error(quem.erro);
+      s.eu = quem.dados;
+      if (!elFerramentas.dataset.pronto) {
+        elFerramentas.dataset.pronto = '1';
+        desenharFerramentas(s.token);
+      }
+
+      const lista = await chamarTool(s.token, 'listar_pacientes', {}, s.nome);
+      if (lista.erro) throw new Error(lista.erro);
+      s.pacientes = (lista.dados && lista.dados.pacientes) || [];
+      s.carregando = false;
+      desenhar();
+      if (s.pacientes.length) await selecionar(chave, s.pacientes[0].id);
+    } catch (e) {
+      s.carregando = false;
+      s.aviso = { tipo: 'negado', titulo: 'Não foi possível carregar', texto: e.message };
+      desenhar();
+    }
+  }
+
+  async function selecionar(chave, pacienteId) {
+    const s = estado[chave];
+    s.selecionado = pacienteId;
+    s.exames = null;
+    s.aviso = null;
+    desenhar();
+    const r = await chamarTool(s.token, 'buscar_exames', { paciente_id: pacienteId }, s.nome);
+    if (r.erro) {
+      s.exames = [];
+      s.aviso = { tipo: 'negado', titulo: 'Bloqueado', texto: r.erro };
+    } else {
+      s.exames = (r.dados && r.dados.exames) || [];
+    }
+    desenhar();
+  }
+
+  async function tentarOutraClinica(chave) {
+    const s = estado[chave];
+    const outra = estado[chave === 'alfa' ? 'beta' : 'alfa'];
+    const alvo = outra.pacientes[0];
+    if (!alvo) {
+      s.aviso = { tipo: 'esperando', titulo: 'Aguarde', texto: 'A outra clínica ainda está carregando.' };
+      return desenhar();
+    }
+    s.aviso = { tipo: 'esperando', titulo: 'Consultando…', texto: 'Pedindo ao servidor os exames de ' + alvo.nome + ', que é paciente da ' + outra.nome + '.' };
+    desenhar();
+
+    const r = await chamarTool(s.token, 'buscar_exames', { paciente_id: alvo.id }, s.nome);
+    s.aviso = r.erro
+      ? { tipo: 'negado', titulo: 'Bloqueado pelo banco', texto: r.erro, extra: alvo.nome + ' existe no banco e aparece na outra metade desta tela. Para ' + s.email + ', não existe.' }
+      : { tipo: 'aceito', titulo: 'Atenção: passou', texto: 'A consulta devolveu dados de outra clínica. Isso seria uma falha de isolamento.' };
+    desenhar();
+  }
+
+  async function criarExame(chave, tipo, resultado) {
+    const s = estado[chave];
+    if (!s.selecionado) return;
+    const args = { paciente_id: s.selecionado, tipo };
+    if (resultado) args.resultado = resultado;
+    const r = await chamarTool(s.token, 'criar_exame', args, s.nome);
+    if (r.erro) {
+      s.aviso = { tipo: 'negado', titulo: 'Não gravou', texto: r.erro };
+      desenhar();
+      return;
+    }
+    s.aviso = { tipo: 'aceito', titulo: 'Exame registrado', texto: 'A clínica e o autor vieram do banco e do token, não deste formulário.' };
+    await selecionar(chave, s.selecionado);
+  }
+
+  /* ----------------- desenho ----------------- */
+
+  function dataCurta(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return isNaN(d) ? iso : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+
+  function montarPainel(chave) {
+    const s = estado[chave];
+    const el = document.createElement('section');
+    el.className = 'clinica';
+    el.dataset.org = chave;
+
+    const paciente = s.pacientes.find((p) => p.id === s.selecionado) || null;
+
+    const cab = document.createElement('div');
+    cab.className = 'cabecalho';
+    const quem = document.createElement('div');
+    quem.className = 'quem';
+    const h2 = document.createElement('h2');
+    h2.textContent = s.nome;
+    const email = document.createElement('div');
+    email.className = 'email mono';
+    email.textContent = s.eu ? s.eu.email : s.email;
+    quem.append(h2, email);
+    const selo = document.createElement('span');
+    selo.className = 'selo';
+    selo.textContent = s.eu ? 'identidade confirmada pelo servidor' : 'entrando…';
+    cab.append(quem, selo);
+    el.append(cab);
+
+    const corpo = document.createElement('div');
+    corpo.className = 'corpo';
+
+    // coluna 1: pacientes
+    const c1 = document.createElement('div');
+    c1.className = 'coluna';
+    const r1 = document.createElement('div');
+    r1.className = 'rotulo';
+    r1.textContent = s.carregando ? 'Pacientes' : 'Pacientes · ' + s.pacientes.length;
+    c1.append(r1);
+
+    if (s.carregando) {
+      const v = document.createElement('p');
+      v.className = 'vazio';
+      v.textContent = 'Entrando e consultando o servidor…';
+      c1.append(v);
+    } else if (!s.pacientes.length) {
+      const v = document.createElement('p');
+      v.className = 'vazio';
+      v.textContent = 'Nenhum paciente visível para este médico.';
+      c1.append(v);
+    } else {
+      const ul = document.createElement('ul');
+      ul.className = 'lista';
+      for (const p of s.pacientes) {
+        const li = document.createElement('li');
+        const b = document.createElement('button');
+        b.className = 'paciente';
+        b.setAttribute('aria-current', String(p.id === s.selecionado));
+        b.append(document.createTextNode(p.nome));
+        const nasc = document.createElement('span');
+        nasc.className = 'nasc';
+        nasc.textContent = 'nasc. ' + dataCurta(p.data_nascimento);
+        b.append(nasc);
+        b.addEventListener('click', () => selecionar(chave, p.id));
+        li.append(b);
+        ul.append(li);
+      }
+      c1.append(ul);
+    }
+
+    // coluna 2: registro do paciente
+    const c2 = document.createElement('div');
+    c2.className = 'coluna';
+    const r2 = document.createElement('div');
+    r2.className = 'rotulo';
+    r2.textContent = paciente ? 'Exames · ' + paciente.nome : 'Exames';
+    c2.append(r2);
+
+    if (!paciente) {
+      const v = document.createElement('p');
+      v.className = 'vazio';
+      v.textContent = s.carregando ? 'Aguardando a lista de pacientes.' : 'Escolha um paciente à esquerda.';
+      c2.append(v);
+    } else if (s.exames === null) {
+      const v = document.createElement('p');
+      v.className = 'vazio';
+      v.textContent = 'Buscando os exames…';
+      c2.append(v);
+    } else if (!s.exames.length) {
+      const v = document.createElement('p');
+      v.className = 'vazio';
+      v.textContent = 'Nenhum exame registrado.';
+      c2.append(v);
+    } else {
+      const wrap = document.createElement('div');
+      wrap.className = 'lista';
+      for (const e of s.exames) {
+        const card = document.createElement('div');
+        card.className = 'exame';
+        const cima = document.createElement('div');
+        cima.className = 'cima';
+        const tipo = document.createElement('span');
+        tipo.className = 'tipo';
+        tipo.textContent = e.tipo;
+        const data = document.createElement('span');
+        data.className = 'data';
+        data.textContent = dataCurta(e.realizado_em);
+        cima.append(tipo, data);
+        const res = document.createElement('div');
+        res.className = 'resultado';
+        res.textContent = e.resultado || '';
+        card.append(cima, res);
+        wrap.append(card);
+      }
+      c2.append(wrap);
+    }
+
+    if (paciente) {
+      const form = document.createElement('form');
+      form.className = 'novo';
+      const iTipo = document.createElement('input');
+      iTipo.id = 'tipo-' + chave;
+      iTipo.required = true;
+      iTipo.maxLength = 200;
+      iTipo.placeholder = 'Tipo, ex.: Hemograma';
+      const iRes = document.createElement('input');
+      iRes.id = 'res-' + chave;
+      iRes.maxLength = 5000;
+      iRes.placeholder = 'Laudo (opcional)';
+      const env = document.createElement('button');
+      env.type = 'submit';
+      env.textContent = 'Registrar';
+      form.append(iTipo, iRes, env);
+      form.addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        const t = iTipo.value.trim();
+        if (!t) return;
+        env.disabled = true;
+        criarExame(chave, t, iRes.value.trim());
+      });
+      c2.append(form);
+    }
+
+    // a prova: pedir um paciente da outra clinica
+    const area = document.createElement('div');
+    area.className = 'bloqueio-area';
+    const outra = chave === 'alfa' ? 'Beta' : 'Alfa';
+    const alvo = estado[chave === 'alfa' ? 'beta' : 'alfa'].pacientes[0] || null;
+    const btn = document.createElement('button');
+    btn.className = 'btn-bloqueio';
+    btn.textContent = alvo
+      ? 'Tentar abrir ' + alvo.nome
+      : 'Carregando a ' + outra + '\u2026';
+    btn.disabled = s.carregando || !alvo;
+    btn.addEventListener('click', () => tentarOutraClinica(chave));
+    area.append(btn);
+
+    if (s.aviso) {
+      const av = document.createElement('div');
+      av.className = 'aviso ' + s.aviso.tipo;
+      const txt = document.createElement('div');
+      const forte = document.createElement('strong');
+      forte.textContent = s.aviso.titulo + ' ';
+      txt.append(forte, document.createTextNode(s.aviso.texto));
+      if (s.aviso.extra) {
+        const extra = document.createElement('div');
+        extra.style.marginTop = '5px';
+        extra.style.color = 'var(--tinta-fraca)';
+        extra.textContent = s.aviso.extra;
+        txt.append(extra);
+      }
+      av.append(txt);
+      area.append(av);
+    }
+    c2.append(area);
+
+    corpo.append(c1, c2);
+    el.append(corpo);
+    return el;
+  }
+
+  function desenhar() {
+    elPaineis.dataset.modo = modo;
+    elPaineis.replaceChildren(
+      ...(modo === 'comparacao' ? CLINICAS.map((c) => montarPainel(c.chave)) : [montarPainel(clinicaAtiva)])
+    );
+    document.getElementById('btn-alfa').setAttribute('aria-pressed', String(modo === 'app' && clinicaAtiva === 'alfa'));
+    document.getElementById('btn-beta').setAttribute('aria-pressed', String(modo === 'app' && clinicaAtiva === 'beta'));
+    document.getElementById('btn-comparar').setAttribute('aria-pressed', String(modo === 'comparacao'));
+  }
+
+  document.getElementById('btn-alfa').addEventListener('click', () => { modo = 'app'; clinicaAtiva = 'alfa'; desenhar(); });
+  document.getElementById('btn-beta').addEventListener('click', () => { modo = 'app'; clinicaAtiva = 'beta'; desenhar(); });
+  document.getElementById('btn-comparar').addEventListener('click', () => {
+    modo = modo === 'comparacao' ? 'app' : 'comparacao';
+    desenhar();
+  });
+
+  if (!configurado) {
+    mostrarComoConfigurar();
+  } else {
+    iniciar();
+  }
+
+  /** Sem config, a pagina explica o que falta em vez de falhar em silencio. */
+  function mostrarComoConfigurar() {
+    const aviso = document.createElement('section');
+    aviso.className = 'clinica';
+    const cab = document.createElement('div');
+    cab.className = 'cabecalho';
+    const h2 = document.createElement('h2');
+    h2.textContent = 'Falta apontar para o seu projeto Supabase';
+    cab.append(h2);
+    const corpo = document.createElement('div');
+    corpo.className = 'coluna';
+    const p1 = document.createElement('p');
+    p1.textContent = 'Crie o arquivo de configuracao a partir do exemplo e preencha com a URL do seu projeto e a chave publishable:';
+    const pre = document.createElement('pre');
+    pre.className = 'chamada mono';
+    pre.textContent = 'cp web/config.example.js web/config.js\n# edite web/config.js, depois recarregue esta pagina';
+    const p2 = document.createElement('p');
+    p2.className = 'nota-chave';
+    p2.textContent = 'Os dois valores estao no painel do Supabase, em Project Settings > API Keys. Nunca use a chave secret (service_role) aqui.';
+    corpo.append(p1, pre, p2);
+    aviso.append(cab, corpo);
+    elPaineis.replaceChildren(aviso);
+    elFerramentas.replaceChildren(
+      Object.assign(document.createElement('p'), { className: 'vazio', textContent: 'Aguardando a configuracao.' })
+    );
+  }
+
+  function iniciar() {
+  desenhar();
+  // As duas clinicas entram ja no carregamento, uma depois da outra: o modo
+  // comparacao precisa das duas listas, e o id do paciente da outra clinica
+  // alimenta a prova. Sequencial de proposito - em paralelo, um clique rapido
+  // podia pegar a segunda clinica ainda vazia, que e a imagem errada.
+  (async () => {
+    for (const c of CLINICAS) await abrirClinica(c.chave);
+  })();
+  }
+</script>

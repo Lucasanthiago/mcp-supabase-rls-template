@@ -1,0 +1,17 @@
+node_modules/
+.env
+.env.local
+# Copias de .env para alternar entre local e hosted. Carregam a service_role key.
+.env.*.bak
+.env.bak
+# Gerado por `npm run mcp:config`: carrega o JWT dos usuarios de teste.
+.mcp.json
+# Configuracao pessoal do Claude Code (aprovacao dos servidores do .mcp.json).
+.claude/settings.local.json
+supabase/.temp/
+supabase/.branches/
+
+# Variaveis locais das Edge Functions (copiadas de supabase/functions/mcp/.env.example)
+supabase/functions/.env
+# Vinculo local com a Vercel (criado por `vercel deploy`).
+.vercel

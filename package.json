@@ -1,0 +1,28 @@
+{
+  "name": "mcp-supabase-rls-template",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Template: multitenant com Row Level Security no Supabase e um servidor MCP que roda como o usuario logado",
+  "scripts": {
+    "seed": "tsx scripts/seed.ts",
+    "test:rls": "tsx scripts/test-isolamento.ts",
+    "verify:local": "bash db/local-verify/run.sh",
+    "typecheck": "tsc --noEmit",
+    "test:mcp": "tsx scripts/test-mcp.ts",
+    "demo": "tsx scripts/demo.ts",
+    "mcp:config": "tsx scripts/mcp-config.ts",
+    "ui": "node scripts/ui.mjs",
+    "token": "tsx scripts/token.ts",
+    "check:mcp": "cd supabase/functions/mcp && deno task check",
+    "gen:types": "supabase gen types typescript --local > supabase/functions/mcp/database.types.ts && deno fmt supabase/functions/mcp/database.types.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.58.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

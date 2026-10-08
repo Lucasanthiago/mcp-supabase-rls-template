@@ -1,0 +1,39 @@
+# Configuracao minima do Supabase CLI, so o suficiente para `supabase start`.
+# Se a sua versao do CLI reclamar de algum campo, rode `supabase init --force`
+# (isso regenera este arquivo e nao toca em migrations/ nem em seed.sql).
+
+project_id = "poc-mcp-rls"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+# Os usuarios de teste sao criados com email_confirm: true pela Admin API;
+# desligar a confirmacao aqui evita atrito ao criar usuarios a mao no Studio.
+enable_confirmations = false
+
+# Servidor MCP (supabase/functions/mcp). O gateway NAO verifica o JWT porque a
+# propria funcao verifica (withSupabase, contra o JWKS do projeto): assim ela
+# devolve o 401 com o desafio WWW-Authenticate que clientes MCP esperam.
+[functions.mcp]
+verify_jwt = false
